@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # SDS Venue Booking
 
 Plain HTML/CSS/JS front end (`public/`) + Vercel serverless functions (`api/`) + Neon Postgres.
@@ -22,3 +23,6 @@ Default administrator: `admin` / `Admin@SDS2026`. Change it before sharing the l
 
 ## Local run
 `npm i -g vercel`, `npm install`, `vercel link`, `vercel env pull .env.local`, `vercel dev`
+=======
+# SDS-Project-01
+>>>>>>> f3559e14d2137965cb69b22a7107aeed31298081
