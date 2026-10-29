@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Administrator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head><body>
+<header class="top"><a class="brand" href="/">Venue Booking: Administrator</a><div class="who" id="who" hidden><span id="whoName"></span><button class="btn ghost" id="logoutBtn">Log out</button></div></header>
+<main>
+<section id="auth" class="narrow card" hidden>
+  <h2 style="margin-bottom:1rem">Administrator login</h2>
+  <form id="loginForm" class="stack">
+    <div><label for="au">Username</label><input id="au" autocomplete="username" required></div>
+    <div><label for="ap">Password</label><input id="ap" type="password" autocomplete="current-password" required></div>
+    <button class="btn" style="width:100%">Log in</button>
+  </form>
+  <p class="err" id="authErr" role="alert"></p>
+</section>
+<section id="app" hidden>
+  <div class="tabs" role="tablist" id="filters">
+    <button class="tab" role="tab" data-s="pending">Pending</button><button class="tab" role="tab" data-s="approved">Approved</button>
+    <button class="tab" role="tab" data-s="rejected">Rejected</button><button class="tab" role="tab" data-s="all">All</button>
+  </div>
+  <div class="list" id="list"></div>
+</section>
+</main>
+<script src="/js/common.js"></script>
+<script>
+let status = 'pending';
+function showAuth() { $('#auth').hidden = false; $('#app').hidden = true; $('#who').hidden = true; }
+function showApp(u) { $('#auth').hidden = true; $('#app').hidden = false; $('#who').hidden = false; $('#whoName').textContent = u.name; load(); }
+$('#logoutBtn').onclick = () => logout('/');
+$('#loginForm').onsubmit = async (e) => {
+  e.preventDefault(); $('#authErr').textContent = '';
+  try { const { user } = await api('/api/auth?action=admin-login', { method: 'POST', body: { username: $('#au').value, password: $('#ap').value } }); showApp(user); }
+  catch (er) { $('#authErr').textContent = er.message; }
+};
+$('#filters').onclick = (e) => { const b = e.target.closest('[data-s]'); if (b) { status = b.dataset.s; load(); } };
+
+async function load() {
+  document.querySelectorAll('#filters .tab').forEach((b) => b.setAttribute('aria-selected', b.dataset.s === status));
+  const box = $('#list');
+  try {
+    const { bookings } = await api('/api/admin?status=' + status);
+    box.innerHTML = bookings.length ? bookings.map(card).join('') : `<p class="empty">No ${status === 'all' ? '' : status + ' '}requests.</p>`;
+  } catch (er) { box.innerHTML = `<p class="err">${esc(er.message)}</p>`; }
+}
+function card(b) {
+  const pend = b.status === 'pending';
+  return `<div class="card"><div class="row"><div><h3>${esc(b.venue)}</h3>
+    <div class="meta">${fmtDate(b.booking_date)}, ${fmtH(b.start_hour)} to ${fmtH(b.end_hour)}</div></div>
+    <span class="pill ${b.status}">${b.status[0].toUpperCase() + b.status.slice(1)}</span></div>
+    <div>${esc(b.purpose)} (${b.attendees} people)</div>
+    <div class="note">Requested by ${esc(b.name)} (@${esc(b.username)})</div>
+    ${b.admin_note && !pend ? `<div class="note">Note: ${esc(b.admin_note)}</div>` : ''}
+    ${pend && b.conflict ? '<div class="warn">An approved booking already overlaps this room and time. You can only reject this request.</div>' : ''}
+    ${pend ? `<div class="actions" data-id="${b.id}"><input placeholder="Note to the requester (optional)" maxlength="200" aria-label="Note">
+      <button class="btn ok" data-a="approve" ${b.conflict ? 'disabled' : ''}>Approve</button><button class="btn bad" data-a="reject">Reject</button></div>` : ''}</div>`;
+}
+$('#list').onclick = async (e) => {
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  const box = b.closest('.actions');
+  try {
+    await api('/api/admin', { method: 'POST', body: { id: box.dataset.id, action: b.dataset.a, note: box.querySelector('input').value } });
+    toast(b.dataset.a === 'approve' ? 'Approved.' : 'Rejected.'); load();
+  } catch (er) { toast(er.message, true); load(); }
+};
+
+(async () => {
+  try { const { user } = await api('/api/auth?action=me'); if (user && user.role === 'admin') return showApp(user); } catch {}
+  showAuth();
+})();
+</script>
+</body></html>

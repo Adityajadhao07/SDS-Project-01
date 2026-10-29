@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Request a room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head><body>
+<header class="top"><a class="brand" href="/">Venue Booking</a><div class="who" id="who" hidden><span id="whoName"></span><button class="btn ghost" id="logoutBtn">Log out</button></div></header>
+<main>
+<section id="auth" class="narrow card" hidden>
+  <div class="tabs" role="tablist"><button class="tab" role="tab" data-t="login">Log in</button><button class="tab" role="tab" data-t="register">Register</button></div>
+  <form id="loginForm" class="stack">
+    <div><label for="lu">Username</label><input id="lu" autocomplete="username" required></div>
+    <div><label for="lp">Password</label><input id="lp" type="password" autocomplete="current-password" required></div>
+    <button class="btn" style="width:100%">Log in</button>
+  </form>
+  <form id="regForm" class="stack" hidden>
+    <div><label for="rn">Full name</label><input id="rn" autocomplete="name" required></div>
+    <div><label for="ru">Username</label><input id="ru" autocomplete="username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9_.]+" title="Letters, numbers, dot or underscore"></div>
+    <div><label for="rp">Password (6+ characters)</label><input id="rp" type="password" autocomplete="new-password" required minlength="6"></div>
+    <button class="btn" style="width:100%">Create account</button>
+  </form>
+  <p class="err" id="authErr" role="alert"></p>
+</section>
+
+<section id="app" hidden>
+  <div class="tabs" role="tablist"><button class="tab" role="tab" data-p="find">Find a room</button><button class="tab" role="tab" data-p="mine">My requests</button></div>
+  <div id="find">
+    <form id="searchForm" class="card"><div class="filters">
+      <div><label for="fd">Date</label><input id="fd" type="date" required></div>
+      <div><label for="fs">From</label><select id="fs"></select></div>
+      <div><label for="fe">To</label><select id="fe"></select></div>
+      <div><label for="fc">People</label><input id="fc" type="number" min="1" placeholder="Any"></div>
+      <div><label for="ft">Type</label><select id="ft"><option value="">Any</option><option>Classroom</option><option>Auditorium</option></select></div>
+    </div>
+    <div class="checks" style="margin-top:1rem"><label><input type="checkbox" id="fp"> Projector</label><label><input type="checkbox" id="fsnd"> Sound system</label>
+      <button class="btn" style="margin-left:auto">Show rooms</button></div>
+    <p class="err" id="searchErr" role="alert"></p></form>
+    <p class="note" id="summary"></p>
+    <div class="grid" id="rooms"></div>
+  </div>
+  <div id="mine" class="list" hidden></div>
+</section>
+</main>
+
+<dialog id="dlg"><form id="reqForm" class="stack">
+  <h3 id="dlgTitle"></h3>
+  <div><label for="dp">Purpose</label><textarea id="dp" maxlength="200" required placeholder="e.g. Coding club workshop"></textarea></div>
+  <div><label for="da">Expected attendees</label><input id="da" type="number" min="1" required></div>
+  <p class="err" id="dlgErr" role="alert"></p>
+  <div class="actions"><button class="btn">Send request</button><button class="btn ghost" type="button" id="dlgCancel">Cancel</button></div>
+</form></dialog>
+
+<script src="/js/common.js"></script>
+<script>
+let q = null, pick = null;
+const showAuth = (t) => {
+  $('#auth').hidden = false; $('#app').hidden = true; $('#who').hidden = true;
+  $('#loginForm').hidden = t !== 'login'; $('#regForm').hidden = t !== 'register'; $('#authErr').textContent = '';
+  document.querySelectorAll('#auth .tab').forEach((b) => b.setAttribute('aria-selected', b.dataset.t === t));
+};
+document.querySelectorAll('#auth .tab').forEach((b) => b.onclick = () => showAuth(b.dataset.t));
+
+function showApp(u) {
+  $('#auth').hidden = true; $('#app').hidden = false; $('#who').hidden = false; $('#whoName').textContent = u.name;
+  $('#fd').min = $('#fd').value = todayIST();
+  hourOptions($('#fs'), 8, 19, 9); hourOptions($('#fe'), 9, 20, 11);
+  setPane('find');
+}
+function setPane(p) {
+  $('#find').hidden = p !== 'find'; $('#mine').hidden = p !== 'mine';
+  document.querySelectorAll('#app .tab').forEach((b) => b.setAttribute('aria-selected', b.dataset.p === p));
+  if (p === 'mine') loadMine();
+}
+document.querySelectorAll('#app .tab').forEach((b) => b.onclick = () => setPane(b.dataset.p));
+$('#logoutBtn').onclick = () => logout('/');
+
+async function authSubmit(e, action, body) {
+  e.preventDefault(); $('#authErr').textContent = '';
+  try { const { user } = await api('/api/auth?action=' + action, { method: 'POST', body }); showApp(user); }
+  catch (er) { $('#authErr').textContent = er.message; }
+}
+$('#loginForm').onsubmit = (e) => authSubmit(e, 'login', { username: $('#lu').value, password: $('#lp').value });
+$('#regForm').onsubmit = (e) => authSubmit(e, 'register', { name: $('#rn').value, username: $('#ru').value, password: $('#rp').value });
+
+$('#searchForm').onsubmit = async (e) => {
+  e.preventDefault(); $('#searchErr').textContent = '';
+  q = { date: $('#fd').value, start: +$('#fs').value, end: +$('#fe').value };
+  if (q.end <= q.start) { $('#searchErr').textContent = 'The end time must be after the start time.'; return; }
+  const p = new URLSearchParams({ ...q, minCapacity: $('#fc').value, type: $('#ft').value, projector: $('#fp').checked ? 1 : '', sound: $('#fsnd').checked ? 1 : '' });
+  try {
+    const { venues } = await api('/api/venues?' + p);
+    const free = venues.filter((v) => v.available).length;
+    $('#summary').textContent = `${free} of ${venues.length} matching rooms are free ${fmtDate(q.date)}, ${fmtH(q.start)} to ${fmtH(q.end)}.`;
+    $('#rooms').innerHTML = venues.length ? venues.map(roomCard).join('') : '<p class="empty">No rooms match. Lower the number of people or remove a feature.</p>';
+  } catch (er) { $('#searchErr').textContent = er.message; }
+};
+
+function roomCard(v) {
+  const cells = Array.from({ length: 12 }, (_, i) => { const h = i + 8; return `<i class="${v.busy.includes(h) ? 'b' : ''} ${h >= q.start && h < q.end ? 'w' : ''}"></i>`; }).join('');
+  return `<article class="card room ${v.available ? '' : 'off'}">
+    <header><h3>${esc(v.name)}</h3><span class="meta">${v.capacity} seats</span></header>
+    <div class="chips"><span class="chip">${v.type}</span>${v.projector ? '<span class="chip">Projector</span>' : ''}${v.soundSystem ? '<span class="chip">Sound system</span>' : ''}</div>
+    <div class="strip" role="img" aria-label="Booked hours between 8 AM and 8 PM">${cells}</div>
+    <div class="scale"><span>8 AM</span><span>2 PM</span><span>8 PM</span></div>
+    <button class="btn" style="width:100%" data-v="${esc(v.name)}" data-c="${v.capacity}" ${v.available ? '' : 'disabled'}>${v.available ? 'Request this room' : 'Booked in this window'}</button>
+  </article>`;
+}
+
+$('#rooms').onclick = (e) => {
+  const b = e.target.closest('button[data-v]'); if (!b) return;
+  pick = { venue: b.dataset.v, cap: +b.dataset.c };
+  $('#dlgTitle').textContent = `${pick.venue}, ${fmtDate(q.date)}, ${fmtH(q.start)} to ${fmtH(q.end)}`;
+  $('#da').max = pick.cap; $('#da').value = $('#fc').value || ''; $('#dp').value = ''; $('#dlgErr').textContent = '';
+  $('#dlg').showModal();
+};
+$('#dlgCancel').onclick = () => $('#dlg').close();
+$('#reqForm').onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await api('/api/bookings', { method: 'POST', body: { venue: pick.venue, ...q, purpose: $('#dp').value, attendees: $('#da').value } });
+    $('#dlg').close(); toast('Request sent. The administrator will review it.');
+    setPane('mine');
+  } catch (er) { $('#dlgErr').textContent = er.message; }
+};
+
+async function loadMine() {
+  const box = $('#mine');
+  try {
+    const { bookings } = await api('/api/bookings');
+    box.innerHTML = bookings.length ? bookings.map((b) => `<div class="card"><div class="row"><div>
+      <h3>${esc(b.venue)}</h3><div class="meta">${fmtDate(b.booking_date)}, ${fmtH(b.start_hour)} to ${fmtH(b.end_hour)}</div></div>
+      <span class="pill ${b.status}">${b.status[0].toUpperCase() + b.status.slice(1)}</span></div>
+      <div>${esc(b.purpose)} (${b.attendees} people)</div>
+      ${b.admin_note ? `<div class="note">Administrator note: ${esc(b.admin_note)}</div>` : ''}
+      ${['pending', 'approved'].includes(b.status) ? `<div class="actions"><button class="btn bad" data-cancel="${b.id}">Cancel request</button></div>` : ''}</div>`).join('')
+      : '<p class="empty">No requests yet. Find a room to send your first one.</p>';
+  } catch (er) { box.innerHTML = `<p class="err">${esc(er.message)}</p>`; }
+}
+$('#mine').onclick = async (e) => {
+  const b = e.target.closest('[data-cancel]'); if (!b || !confirm('Cancel this request?')) return;
+  try { await api('/api/bookings?id=' + b.dataset.cancel, { method: 'DELETE' }); toast('Request cancelled.'); loadMine(); }
+  catch (er) { toast(er.message, true); }
+};
+
+(async () => {
+  try { const { user } = await api('/api/auth?action=me'); if (user && user.role === 'user') return showApp(user); } catch {}
+  showAuth(location.hash === '#register' ? 'register' : 'login');
+})();
+</script>
+</body></html>

@@ -1,0 +1,9 @@
+{
+  "name": "sds-venue-booking",
+  "version": "1.0.0",
+  "private": true,
+  "description": "College venue booking system (users request, administrators approve)",
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4"
+  }
+}

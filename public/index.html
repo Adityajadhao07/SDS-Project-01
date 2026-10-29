@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Venue Booking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head><body>
+<header class="top"><span class="brand">Venue Booking</span></header>
+<main>
+  <section class="hero">
+    <h1>Find a free room.<br>Request it. Get it approved.</h1>
+    <p>Search classrooms and auditoriums by capacity, projector and sound system, see which hours are taken, and send a request to the administrator.</p>
+    <div class="demo" aria-hidden="true"><div class="strip" id="demo"></div><div class="scale"><span>8 AM</span><span>2 PM</span><span>8 PM</span></div></div>
+  </section>
+  <div class="paths">
+    <div class="card"><h2>Students and faculty</h2><p class="note">Log in to request a room, or create an account first.</p>
+      <div class="btns"><a class="btn" href="/user">Log in</a><a class="btn ghost" href="/user#register">Register</a></div></div>
+    <div class="card"><h2>Administrator</h2><p class="note">Review requests and approve or reject them.</p>
+      <div class="btns"><a class="btn" href="/admin">Administrator login</a></div></div>
+  </div>
+</main>
+<script>
+// decorative sample day: booked hours (dark) and a requested window (outlined)
+const booked=[9,10,13,14,17],win=[11,12];
+document.getElementById('demo').innerHTML=Array.from({length:12},(_,i)=>{const h=i+8;return `<i class="${booked.includes(h)?'b':''} ${win.includes(h)?'w':''}"></i>`}).join('');
+</script>
+</body></html>
